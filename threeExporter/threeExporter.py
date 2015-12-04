@@ -1,6 +1,6 @@
-__author__ = 'Sean Griffin & Jack Simpson'
+__author__ = 'Jack Simpson'
 __version__ = '2.0.0'
-__email__ = 'sean@thoughtbot.com, jack@jacksimpson.nyc'
+__email__ = 'jack@jacksimpson.nyc'
 
 import sys
 
