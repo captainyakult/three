@@ -20,10 +20,12 @@ kDefaultOptionsString = '0'
 
 
 FLOAT_PRECISION = 6
+TRANCHESTR = 'Tranche'
+FLOORSTR = 'Floor'
 
 class ThreeJsExporter(object):
     def __init__(self):
-        self.componentKeys = ['spin', 'vertices', 'normals', 'colors', 'uvs', 'faces', 'materials', 'skeleton', 'animation']
+        self.componentKeys = ['vertices', 'normals', 'colors', 'uvs', 'faces', 'materials', 'skeleton', 'animation']
         print 'Threejs exporter class initialized'
 
     def run(self, path, optionString):
@@ -32,183 +34,97 @@ class ThreeJsExporter(object):
 
         self.path = path
 
-        self.skeletonName = 'skeleton'
-        self.animationsName = 'animation'
-        self.genderPrefix = ''
-        self.lightBeamFolder = 'lightBeam'
-        self.baseFolder = 'base'
-        self.skeletonAnimationFolder = 'rig'
-        self.beardFolder = 'beard'
-        self.eyebrowsFolder = 'eyebrows'
-        self.glassesFolder = 'glasses'
-        self.hairFolder = 'hair'
-        self.requiresUVs = ['shirt', 'pants', 'foot']
-        self.yarmulkeMapping = dict({
-            'default': {'position': {'x': 0, 'y': 0, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'balding': {'position': {'x': 0, 'y': 0, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'princeton': {'position': {'x': -0.3, 'y': 0.7, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'bieber': {'position': {'x': -0.8, 'y': 0.7, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'bieber_short': {'position': {'x': -0.8, 'y': 0.7, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'buzz': {'position': {'x': 0, 'y': 0, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'emo': {'position': {'x': -1, 'y': 0.4, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'faux_hawk': {'position': {'x': -0.2, 'y': 0.5, 'z': 0}, 'rotation': {'x': -11, 'y': 0, 'z': 0}},
-            'flattop': {'position': {'x': -1, 'y': -0.3, 'z': 0}, 'rotation': {'x': 8, 'y': 0, 'z': 0}},
-            'graduation': {'position': {'x': -1.6, 'y': 0, 'z': 0}, 'rotation': {'x': -21.6, 'y': 0, 'z': 0}},
-            'metal': {'position': {'x': -0.3, 'y': 0.65, 'z': 0}, 'rotation': {'x': -4, 'y': 0, 'z': 0}},
-            'undercut': {'position': {'x': -0.3, 'y': 1.2, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'pompadour': {'position': {'x': -1, 'y': 1.2, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'pompadour_alt': {'position': {'x': -1, 'y': 1.2, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'receding': {'position': {'x': 0, 'y': 0.5, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'dreads': {'position': {'x': -0.8, 'y': -0.7, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'ponytail': {'position': {'x': -0.7, 'y': 0, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'tuff': {'position': {'x': 0.15, 'y': 0.4, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'short_bangs': {'position': {'x': 0.2, 'y': 0.4, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'short_no_bangs': {'position': {'x': -1.4, 'y': 0.14, 'z': 0}, 'rotation': {'x': -9.5, 'y': 0, 'z': 0}},
-            'curly': {'position': {'x': -1.5, 'y': 1.3, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'curly_short': {'position': {'x': -1.2, 'y': 0.6, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-            'afro': {'position': {'x': -1.8, 'y': 2, 'z': 0}, 'rotation': {'x': 0, 'y': 0, 'z': 0}},
-        })
-
         ## get frame info
         self.startFrame = playbackOptions(minTime=True, query=True)
         self.endFrame = playbackOptions(maxTime=True, query=True)
         self.frameRate = 24.0
         self.errors = []
 
-        
-        # male celiREveal spin is at frame 200 (add 'spin 200' to options string) tol=4
-        # female celiREveal spin is at frame 180 (add 'spin 180' to options string) tol=7
-        #idles and headTurn simplifyTolerance should be 8, valueTolerance at 2
-        #landingPage and headTurn simplifyTolerance should be 4, valueTolerance at 1
-        # foundersWall, 4,2 (female C - 6, 0.25) (male D - 3,1.5)
-        # female headTurnD has uses filterCurve because it's a twat
-        self.simplifyTolerance = 6
-        self.valueTolerance = 1
-        self.blinkSimplifyTolerance = 2
-        self.spinSimplifyTolerance = 3
-        self.deleteKeysStr = ['_pose_', '_yamuka_']
-        self.globalPruneThreshold = 0.02
-
         ## parse options
         self.options = self._parseOptions(optionString)
         self.vertexColors = self.options['colors']
         self.exUvs = self.options['uvs']
+        self.requiresUVs = []
+
+        ## 
+        
 
 
 
-        ## remove namspaces (may have to do this manually because it causes bugs)
-        print 'Removing namespaces...'
-        nodes = ls(dag=1, v=1)
-        self._removeNamespaces(nodes)
+        
+        selected = ls(sl=1)
+        if len(selected) == 0:
+            print "Please select something to export!"
+            return
+        # ## ANIMATIONS EXPORT
+        # if self.options["animation"]:
 
+        #     self.__jointsList = self._getJoints()
+        #     self.processBones()
+        #     # return
 
-        ## SKELETON EXPORT
-        if self.options["skeleton"]:
+        #     self.animations = []
 
-            print "exporting skeleton for %s" % self.genderPrefix
-            self.bones = []
-            filePath = os.path.join(self.path, self.genderPrefix, self.skeletonAnimationFolder, "%s_%s.json" % (self.genderPrefix, self.skeletonName))
+        #     animName = self.options['animationData']['name']
 
-            # if len(self.__jointsList) == 0:
-            #     raise Exception("No joints have been selected!")
+        #     startFrame = int(self.options['animationData']['startFrame'])
+        #     endFrame = int(self.options['animationData']['endFrame'])
 
-            output = {
-                'metadata': {
-                    'name': 'Maya to Three.js Export',
-                    'version': 2.0,
-                    'createdBy': 'HyperHyper'
-                },
-                'bones': []
-            }
+        #     filePath = os.path.join(self.path, self.genderPrefix, self.skeletonAnimationFolder, "%s_%s_%s.json" % (self.genderPrefix, self.animationsName, animName))
 
-            # select(map(lambda m: m.getParent(), meshGrp))
-            self.__jointsList = self._getJoints()
-            runtime.GoToBindPose()
+        #     print("exporting %s animation from frames %i to %i" % (animName, startFrame, endFrame))
+        #     self.__jointsList = self._getJoints()
+        #     self._exportKeyframeAnimations(animName, startFrame, endFrame)
 
-            if self._exportBones() is False:
-                return
-            output['bones'] = self.bones
+        #     output = {
+        #         'metadata': {
+        #             'name': 'Maya to Three.js Export',
+        #             'version': 2.0,
+        #             'createdBy': 'HyperHyper'
+        #         },
+        #         'animations': []
+        #     }
 
-            self.writeFile(filePath, output)
+        #     output['animations'] = self.animations
 
-            print 'skeleton exported!'
+        #     self.writeFile(filePath, output)
 
-
-        ## ANIMATIONS EXPORT
-        if self.options["animation"]:
-
-
-            self.__jointsList = self._getJoints()
-            self.processBones()
-            # return
-
-            self.animations = []
-
-            animName = self.options['animationData']['name']
-
-            startFrame = int(self.options['animationData']['startFrame'])
-            endFrame = int(self.options['animationData']['endFrame'])
-
-            filePath = os.path.join(self.path, self.genderPrefix, self.skeletonAnimationFolder, "%s_%s_%s.json" % (self.genderPrefix, self.animationsName, animName))
-
-            print("exporting %s animation from frames %i to %i" % (animName, startFrame, endFrame))
-            self.__jointsList = self._getJoints()
-            self._exportKeyframeAnimations(animName, startFrame, endFrame)
-
-            output = {
-                'metadata': {
-                    'name': 'Maya to Three.js Export',
-                    'version': 2.0,
-                    'createdBy': 'HyperHyper'
-                },
-                'animations': []
-            }
-
-            output['animations'] = self.animations
-
-            self.writeFile(filePath, output)
-
-            print 'animation exported!'
+        #     print 'animation exported!'
 
         ## GEOMETRY EXPORT
         if self.options["faces"]:
             print 'exporting meshes'
-            meshList = self.populateMeshArray()
+            for sel in selected:
+                self.__meshList = []
+                self.buildGeoArray(sel)
+
+                for mesh in self.__meshList:
+                    print mesh
+                    ## remove namspaces
+                    #print 'Removing namespaces...'
+                    #self._removeNamespaces(mesh)
+            return
 
             for mesh in meshList:
                 # set name
                 try:
-                    name = mesh.getParent().name()
+                    name = mesh.name()
                 except:
                     name = mesh.split("_")[0]
 
 
                 ## put into correct folder
-                if self.genderPrefix == 'lightBeam':
-                    outFolder = self.lightBeamFolder
+                # if self.genderPrefix == 'lightBeam':
+                #     outFolder = self.lightBeamFolder
 
-                elif self.genderPrefix == 'male' and 'beard' in name:
-                    outFolder = self.beardFolder
-
-                elif self.genderPrefix == 'female' and 'eyebrow' in name:
-                    outFolder = self.eyebrowsFolder
-
-                elif 'hair' in name or 'turban' in name or 'arab_scarf' in name or 'yarmulke' in name or 'niqab' in name or 'hijab' in name:
-                        outFolder = self.hairFolder
-                elif 'glasses' in name:
-                        outFolder = self.glassesFolder
-                else:
-                    outFolder = self.baseFolder
-
-
-                filePath = os.path.join(self.path, self.genderPrefix, outFolder, "%s_%s.json" % (self.genderPrefix, name))
+                filePath = os.path.join(self.path, "%s.json" % (name))
 
                 print "exporting %s mesh..." % name
 
                 ## prune mesh and raise excpetion if weights over 4
-                if self.genderPrefix != 'lightBeam':
-                    print "Pruning small skin weights.."
-                    self._smartPrune(mesh)
+                # if self.genderPrefix != 'lightBeam':
+                #     print "Pruning small skin weights.."
+                #     self._smartPrune(mesh)
                 # process mesh with triangulation and deleting deformer history
                 self.processMesh(mesh)
 
@@ -227,14 +143,6 @@ class ThreeJsExporter(object):
 
                 
 
-                # export skins
-                if self.genderPrefix != 'lightBeam':
-                    #select(map(lambda m: m.getParent(), [mesh]))
-                    runtime.GoToBindPose()
-                    self.__jointsList = self._getJoints()
-                    print("exporting skins")
-                    self._exportSkins(mesh)
-
                 self._exportMesh(mesh)
 
 
@@ -242,7 +150,7 @@ class ThreeJsExporter(object):
                     'metadata': {
                         'name': 'Maya to Three.js Export',
                         'version': 2.0,
-                        'createdBy': 'HyperHyper'
+                        'createdBy': 'Jack Simpson'
                     },
                     'colors': self.colors,
                     'vertices': self.vertices,
@@ -252,18 +160,15 @@ class ThreeJsExporter(object):
                     'bones': [],
                     'materials': [],
                 }
-                # custom hair mapping
-                if 'hair' in name and self.genderPrefix == 'male':
-                    # get hairstyle name
-                    hairName = name.split('hair_')[1].split('_c_')[0]
-                    hMapObj = self.yarmulkeMapping[hairName] if self.yarmulkeMapping.has_key(hairName) else self.yarmulkeMapping['default']
-                    output['metadata']['yarMap'] = hMapObj
+                # custom metadata
+                # if '' in name:
+                #     output['metadata']['custom'] = hMapObj
 
                 
-                output['bones'] = []
-                output['skinIndices'] = self.skinIndices
-                output['skinWeights'] = self.skinWeights
-                output['influencesPerVertex'] = self.influences
+                # output['bones'] = []
+                # output['skinIndices'] = self.skinIndices
+                # output['skinWeights'] = self.skinWeights
+                # output['influencesPerVertex'] = self.influences
 
 
                 self.writeFile(filePath, output)
@@ -274,6 +179,152 @@ class ThreeJsExporter(object):
                 print "ERROR: %s" % e
         print "export complete"
         
+    
+    
+    
+        
+    def genOutputFolder(self, node):
+        maxIndex = 5
+        split = node.longName().split('|')[1:maxIndex]
+        return '/'.join(split)
+        
+    def getInstanceInfo(self, instArray):
+        info = {
+            "root": False,
+            "instData": {}
+        }
+        for i in instArray:
+            tArray = getAttr(i+'.translate')
+            rArray = getAttr(i+'.rotate')
+            sArray = getAttr(i+'.scale')
+            rootTranslate = all([int(val) == 0 for val in tArray])
+            rootRotate = all([int(val) == 0 for val in rArray])
+            rootScale = all([int(val) == 1 for val in sArray])
+            
+            if rootTranslate and rootRotate and rootScale:
+                info['root'] = i
+            else:
+                info['instData'][i.name()] = {
+                    "pos": tArray,
+                    "rot": rArray,
+                    "scl": sArray
+                }
+                
+        return info
+        
+
+    def isMesh(self, obj):
+        if len(children(obj)):
+            return False
+        return True
+
+    def children(self, node):
+        return [c for c in node.getChildren() if c.nodeType() == 'transform']
+        
+    def getBuilding(self, node):
+        parNode = node.getParent()
+        return node if parNode is None else getBuilding(parNode)
+        
+    def getTranche(self, node):
+        if node is None:
+            return None
+        par = node.getParent()
+        shortName = node.name().split('|')[-1]
+        split = shortName.split(TRANCHESTR)
+        return node if len(split) > 1 else getTranche(par)
+
+    def getFloor(self, node):
+        if node is None:
+            return None
+        par = node.getParent()
+        shortName = node.name().split('|')[-1]
+        split = shortName.split(FLOORSTR)
+        return node if len(split) > 1 else getFloor(par)
+            
+            
+    def getUnit(self, node):
+        if node is None:
+            return None
+        par = node.getParent()
+        if par is None:
+            return None
+        shortName = par.name().split('|')[-1]
+        split = shortName.split(FLOORSTR)
+        return node if len(split) > 1 else getUnit(par)
+            
+        
+        
+        
+    def genMeta(self, node):
+        metaObj = {}
+        
+        building = self.getBuilding(node)
+        if building != None:
+            metaObj['building'] = { 
+                'name': building.name().split('|')[-1],
+                'centerPoint': [roundToPrec(coord) for coord in building.getRotatePivot()],
+                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % building)]
+            }
+        
+        tranche = self.getTranche(node)
+        if tranche != None:
+            metaObj['tranche'] = { 
+                'name': tranche.name().split(TRANCHESTR)[-1].split('|')[0],
+                'centerPoint': [roundToPrec(coord) for coord in tranche.getRotatePivot()],
+                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % tranche)]
+            }
+            
+        floor = getFloor(node)
+        if floor != None:
+            metaObj['floor'] = { 
+                'number': floor.name().split(FLOORSTR)[-1].split('|')[0],
+                'centerPoint': [roundToPrec(coord) for coord in floor.getRotatePivot()],
+                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % floor)]
+            }
+        unit = getUnit(node)
+        if unit != None:
+            metaObj['unit'] = { 
+                'name': unit.longName().split(FLOORSTR)[-1].split('|')[-1],
+                'centerPoint': [roundToPrec(coord) for coord in unit.getRotatePivot()],
+                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % unit)]
+            }
+        
+        return metaObj
+
+    
+    def buildGeoArray(self, node):
+        instArray = []
+        noninstArray = []
+        
+        if not getAttr("%s.visibility" % node) or node.name().endswith('curves'):
+            return
+        
+        if isMesh(node):
+            self.__meshList.append({
+                "geometry": node,
+                "metadata": self.genMeta(node)
+            })
+            return
+        
+        
+        for child in children(node):
+            if child.name().split('|')[-1].startswith('inst_'):
+                instArray.append(child)
+            else:
+                noninstArray.append(child)
+
+        if len(instArray):
+            instData = self.getInstanceInfo(instArray)
+            # TODO: add root geo to mesh array and include instaData as metadata
+            # self.__meshList.append({
+            #     "geometry": instData.root,
+            #     "metadata": self.genMeta(node)
+            # })
+            print instData
+            
+        if len(noninstArray):
+            for obj in noninstArray:
+                self.buildGeoArray(obj)
 
     def writeFile(self, filePath, output):
         directory = os.path.split(filePath)[0]
@@ -284,10 +335,9 @@ class ThreeJsExporter(object):
 
     def processMesh(self, mesh):
         print "Triangulating %s and deleting non-deformer history..." % mesh.name()
-        par = mesh.getParent()
         try:
-            polyTriangulate(par)
-            bakePartialHistory(par, ppt=1)
+            polyTriangulate(mesh)
+            bakePartialHistory(mesh, ppt=1)
         except:
             self.errors.append("Problem processing mesh, %s." % mesh.name())
 
@@ -410,8 +460,10 @@ class ThreeJsExporter(object):
             par = mesh.getParent()
             # make sure par is not a group node (group nodes have children that are all transform types)
             if any([child.type() != "transform" for child in par.getChildren()]) and par not in geoNodes:
-                print par
+                # print par
                 geoNodes.append(par)
+
+        return geoNodes
 
         meshList = []
         for gnode in geoNodes:
@@ -674,9 +726,7 @@ class ThreeJsExporter(object):
         print 'parsing options'
         options = dict([(x, False) for x in self.componentKeys])
         optionsSplit = optionsString.split(' ')
-        self.genderPrefix = optionsSplit[0]
-        self.influences = int(optionsSplit[1])
-
+        
         for key in self.componentKeys:
             options[key] = key in optionsString
 
@@ -727,15 +777,31 @@ class FramesPerSecond(object):
         else:
             return int(filter(lambda c: c.isdigit(), self.fpsString))
 
+def roundToPrec(floatVal):
+    return round(floatVal, FLOAT_PRECISION)
+
 
 # gender followed by max influences
 # to export geometry, include 'faces' in the export options
 # to export skeleton, include 'skeleton'
 # to export animation, include 'animation' in the export options followed by animation name
 # exportOptions = "female 3 vertices normals colors uvs faces skeleton animation idleA"
-exportOptions = "male 3 vertices normals colors uvs faces"
-exportPath = "C:/Users/Jack/Dropbox/WORK/HyperHyoer/web/JSON_models/10282015"
+exportOptions = "vertices faces"
+exportPath = "/mnt/NY_Interactive/dev/jack/THREE/assets/models"
 
 undoInfo(openChunk=True)
 ThreeJsExporter().run(exportPath, exportOptions)
 undoInfo(closeChunk=True)
+
+
+    
+
+    
+    
+
+
+#for child in selNode.getChildren():
+#    fullName = child.longName()
+#    splitName = fullName.split('|')
+#    tranche = splitName[2]
+#    print splitName
