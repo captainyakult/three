@@ -18,21 +18,28 @@ kPluginTranslatorTypeName = 'Three.js'
 kOptionScript = 'ThreeJsExportScript'
 kDefaultOptionsString = '0'
 
-
+# constants
 FLOAT_PRECISION = 6
-TRANCHESTR = 'Tranche'
-FLOORSTR = 'Floor'
+BUILDING_STR = 'building'
+TRANCHE_STR = 'tranche'
+FLOOR_STR = 'floor'
+UNIT_STR = 'unit'
+INSTANCE_PREFIX = 'inst_'
+FILE_EXT = 'json'
+MODEL_LIST = 'modelList'
+
 
 class ThreeJsExporter(object):
     def __init__(self):
         self.componentKeys = ['vertices', 'normals', 'colors', 'uvs', 'faces', 'materials', 'skeleton', 'animation']
+        self.buildingSections = [BUILDING_STR, TRANCHE_STR, FLOOR_STR, UNIT_STR]
         print 'Threejs exporter class initialized'
 
-    def run(self, path, optionString):
+    def run(self, pathList, optionString):
 
         print 'Executing run method'
 
-        self.path = path
+        self.paths = pathList
 
         ## get frame info
         self.startFrame = playbackOptions(minTime=True, query=True)
@@ -45,10 +52,6 @@ class ThreeJsExporter(object):
         self.vertexColors = self.options['colors']
         self.exUvs = self.options['uvs']
         self.requiresUVs = []
-
-        ## 
-        
-
 
 
         
@@ -93,105 +96,101 @@ class ThreeJsExporter(object):
 
         ## GEOMETRY EXPORT
         if self.options["faces"]:
-            print 'exporting meshes'
+            modelList = []
             for sel in selected:
-                self.__meshList = []
+                self.__meshDataList = []
                 self.buildGeoArray(sel)
 
-                for mesh in self.__meshList:
-                    print mesh
-                    ## remove namspaces
-                    #print 'Removing namespaces...'
-                    #self._removeNamespaces(mesh)
-            return
+                for i, meshData in enumerate(self.__meshDataList):
+                    
+                    isInstance = meshData['instance']
+                    filename = self.genOutputName(meshData['geometry'])
+                    fileOut = "%s.%s" % (filename, FILE_EXT)
+                    modelList.append(filename)
+                    print "Exporting %s..." % meshData['geometry']['node']
 
-            for mesh in meshList:
-                # set name
-                try:
-                    name = mesh.name()
-                except:
-                    name = mesh.split("_")[0]
+                    if isInstance and i == 0: # we have to make sure the root is changed to a longname (we only need to do it on the first one as it is referenced in all the indices)
+                        meshData['instanceData']['root'] = meshData['instanceData']['root'].longName()
 
-
-                ## put into correct folder
-                # if self.genderPrefix == 'lightBeam':
-                #     outFolder = self.lightBeamFolder
-
-                filePath = os.path.join(self.path, "%s.json" % (name))
-
-                print "exporting %s mesh..." % name
-
-                ## prune mesh and raise excpetion if weights over 4
-                # if self.genderPrefix != 'lightBeam':
-                #     print "Pruning small skin weights.."
-                #     self._smartPrune(mesh)
-                # process mesh with triangulation and deleting deformer history
-                self.processMesh(mesh)
-
-
-                self.verticeOffset = 0
-                self.uvOffset = 0
-                self.normalOffset = 0
-                self.colorOffset = 0
-                self.vertices = []
-                self.faces = []
-                self.normals = []
-                self.uvs = []
-                self.colors = []
-                self.skinIndices = []
-                self.skinWeights = []
-
-                
-
-                self._exportMesh(mesh)
-
-
-                output = {
-                    'metadata': {
-                        'name': 'Maya to Three.js Export',
-                        'version': 2.0,
-                        'createdBy': 'Jack Simpson'
-                    },
-                    'colors': self.colors,
-                    'vertices': self.vertices,
-                    'uvs': [self.uvs],
-                    'faces': self.faces,
-                    'normals': self.normals,
-                    'bones': [],
-                    'materials': [],
-                }
-                # custom metadata
-                # if '' in name:
-                #     output['metadata']['custom'] = hMapObj
-
-                
-                # output['bones'] = []
-                # output['skinIndices'] = self.skinIndices
-                # output['skinWeights'] = self.skinWeights
-                # output['influencesPerVertex'] = self.influences
-
-
-                self.writeFile(filePath, output)
+                    self._exportNode(
+                        meshData['geometry']['node'], 
+                        fileOut, meshData['geometry']['metadata'], 
+                        instanceData=meshData['instanceData'] if isInstance else False
+                        )
 
         if len(self.errors):
             print "Export complete - but there's a problem...\nYou thought bad bitches were your fucking problem?\nThis is 10 times worse."
             for e in self.errors:
                 print "ERROR: %s" % e
-        print "export complete"
         
-    
-    
-    
+        print "Writing model list..."
+        self.writeModelList(modelList)
+        print "Export complete!"
+
         
-    def genOutputFolder(self, node):
-        maxIndex = 5
-        split = node.longName().split('|')[1:maxIndex]
-        return '/'.join(split)
+    def _exportNode(self, node, fileout, metadata, instanceData=False):
+
+        # print 'Removing namespaces.'
+        self._removeNamespaces(node)
+        # print "Triangulating and deleting non-deformer history."
+        self._processMesh(node)
+
+        self.verticeOffset = 0
+        self.uvOffset = 0
+        self.normalOffset = 0
+        self.colorOffset = 0
+        self.vertices = []
+        self.faces = []
+        self.normals = []
+        self.uvs = []
+        self.colors = []
+        self.skinIndices = []
+        self.skinWeights = []
+
+        self._exportMesh(node)
+
+        output = {
+            'metadata': {
+                'name': 'Maya to Three.js Export',
+                'version': 2.0,
+                'createdBy': 'Jack Simpson',
+                'geometry': {
+                    "data": metadata,
+                    "instanceData": instanceData if instanceData else 'false'
+                }
+            },
+            'colors': self.colors,
+            'vertices': self.vertices,
+            'uvs': [self.uvs],
+            'faces': self.faces,
+            'normals': self.normals,
+            'bones': [],
+            'materials': []
+        }
+        
+        for path in self.paths:
+            filePath = os.path.join(path, fileout)
+            self.writeFile(filePath, output)
+
+    def writeModelList(self, modelList):
+        output = ["%s.%s" % (m, FILE_EXT) for m in modelList]
+        for path in self.paths:
+            filePath = os.path.join(path, "%s.%s" % (MODEL_LIST, FILE_EXT))
+            self.writeFile(filePath, output)
+
+    
+    def genOutputName(self, node):
+        outputStr = ""
+        for section in self.buildingSections:
+            if section in node['metadata']:
+                outputStr += "%s_" % node['metadata'][section]['value']
+        outputStr += node['node'].name().split('|')[-1]
+        return outputStr
         
     def getInstanceInfo(self, instArray):
         info = {
             "root": False,
-            "instData": {}
+            "offsets": {}
         }
         for i in instArray:
             tArray = getAttr(i+'.translate')
@@ -202,128 +201,121 @@ class ThreeJsExporter(object):
             rootScale = all([int(val) == 1 for val in sArray])
             
             if rootTranslate and rootRotate and rootScale:
+                rootmeta = self.genMeta(i)
+                info['metadata'] = rootmeta
                 info['root'] = i
             else:
-                info['instData'][i.name()] = {
-                    "pos": tArray,
-                    "rot": rArray,
-                    "scl": sArray
+                info['offsets'][i.name()] = {
+                    "pos": [roundToPrec(coord) for coord in tArray],
+                    "rot": [roundToPrec(coord) for coord in rArray],
+                    "scl": [roundToPrec(coord) for coord in sArray]
                 }
+
+        if not info['root']:
+            raise RuntimeError('ERROR!\nInstances identified. Please make sure the root instance has freeze transforms.')
+
+        
                 
         return info
         
 
     def isMesh(self, obj):
-        if len(children(obj)):
+        if len(self.children(obj)):
             return False
         return True
 
     def children(self, node):
         return [c for c in node.getChildren() if c.nodeType() == 'transform']
-        
-    def getBuilding(self, node):
-        parNode = node.getParent()
-        return node if parNode is None else getBuilding(parNode)
-        
-    def getTranche(self, node):
-        if node is None:
-            return None
-        par = node.getParent()
-        shortName = node.name().split('|')[-1]
-        split = shortName.split(TRANCHESTR)
-        return node if len(split) > 1 else getTranche(par)
 
-    def getFloor(self, node):
-        if node is None:
-            return None
+    def getSectionNode(self, node, sectionName):
         par = node.getParent()
-        shortName = node.name().split('|')[-1]
-        split = shortName.split(FLOORSTR)
-        return node if len(split) > 1 else getFloor(par)
-            
-            
-    def getUnit(self, node):
-        if node is None:
-            return None
-        par = node.getParent()
-        if par is None:
-            return None
-        shortName = par.name().split('|')[-1]
-        split = shortName.split(FLOORSTR)
-        return node if len(split) > 1 else getUnit(par)
-            
         
-        
+
+        if sectionName == BUILDING_STR:
+            return node if par is None else self.getSectionNode(par, sectionName)
+        if node is None or par is None:
+            return None
+        splitNode = par if sectionName == UNIT_STR else node
+        shortName = splitNode.name().split('|')[-1]
+        split = shortName.split('%s_' % sectionName)
+        return splitNode if len(split) > 1 else self.getSectionNode(par, sectionName)
         
     def genMeta(self, node):
         metaObj = {}
-        
-        building = self.getBuilding(node)
-        if building != None:
-            metaObj['building'] = { 
-                'name': building.name().split('|')[-1],
-                'centerPoint': [roundToPrec(coord) for coord in building.getRotatePivot()],
-                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % building)]
-            }
-        
-        tranche = self.getTranche(node)
-        if tranche != None:
-            metaObj['tranche'] = { 
-                'name': tranche.name().split(TRANCHESTR)[-1].split('|')[0],
-                'centerPoint': [roundToPrec(coord) for coord in tranche.getRotatePivot()],
-                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % tranche)]
-            }
-            
-        floor = getFloor(node)
-        if floor != None:
-            metaObj['floor'] = { 
-                'number': floor.name().split(FLOORSTR)[-1].split('|')[0],
-                'centerPoint': [roundToPrec(coord) for coord in floor.getRotatePivot()],
-                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % floor)]
-            }
-        unit = getUnit(node)
-        if unit != None:
-            metaObj['unit'] = { 
-                'name': unit.longName().split(FLOORSTR)[-1].split('|')[-1],
-                'centerPoint': [roundToPrec(coord) for coord in unit.getRotatePivot()],
-                'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % unit)]
-            }
+
+        for sectionName in self.buildingSections:
+            sectionNode = self.getSectionNode(node, sectionName)
+            if sectionNode != None:
+                metaObj[sectionName] = { 
+                    'value': sectionNode.name().split('%s_' % sectionName)[-1].split('|')[0],
+                    'centerPoint': [roundToPrec(coord) for coord in sectionNode.getRotatePivot()],
+                    'dimensions': [roundToPrec(coord) for coord in getAttr("%s.boundingBoxSize" % sectionNode)]
+                }
         
         return metaObj
 
+    def isInstance(self, node):
+        return node.name().split('|')[-1].startswith(INSTANCE_PREFIX )
+
     
-    def buildGeoArray(self, node):
-        instArray = []
-        noninstArray = []
+    def buildGeoArray(self, node, instanceData=False):
+        # this function is self invoking and probably too complicated. arg.
+        newInstArray = []
+        existingInstArray = []
+        nonInstArray = []
         
         if not getAttr("%s.visibility" % node) or node.name().endswith('curves'):
             return
         
-        if isMesh(node):
-            self.__meshList.append({
-                "geometry": node,
-                "metadata": self.genMeta(node)
+        if self.isMesh(node):
+            # we hit the bottom of the hierarchy so no more groups! it's either part of an instance root or a unique piece of geo
+            if instanceData:
+                self.__meshDataList.append({
+                    "geometry": {
+                        "node": node,
+                        "metadata": self.genMeta(node)
+                    },
+                    "instance": True,
+                    "instanceData": instanceData
+                })
+                return
+            # else it's unique
+            self.__meshDataList.append({
+                "geometry": {
+                    "node": node,
+                    "metadata": self.genMeta(node)
+                },
+                "instance": False
             })
             return
-        
-        
-        for child in children(node):
-            if child.name().split('|')[-1].startswith('inst_'):
-                instArray.append(child)
-            else:
-                noninstArray.append(child)
 
-        if len(instArray):
-            instData = self.getInstanceInfo(instArray)
-            # TODO: add root geo to mesh array and include instaData as metadata
-            # self.__meshList.append({
-            #     "geometry": instData.root,
-            #     "metadata": self.genMeta(node)
-            # })
-            print instData
+        # selected could be an instance
+        elif self.isInstance(node) and not instanceData:
+            par = node.getParent()
+            for child in self.children(par):
+                if self.isInstance(child):
+                    newInstArray.append(child)
+        
+        # if it's not a mesh or an instance, it's a group - iterate through that group's children
+        else:
+            for child in self.children(node):
+                if instanceData:
+                    existingInstArray.append(child)
+                elif self.isInstance(child):
+                    newInstArray.append(child)
+                else:
+                    nonInstArray.append(child)
+
+        if len(existingInstArray):
+            for obj in existingInstArray:
+                self.buildGeoArray(obj, instanceData=instanceData)
+
+        if len(newInstArray):
+            instData = self.getInstanceInfo(newInstArray)
+            self.buildGeoArray(instData['root'], instanceData=instData)
             
-        if len(noninstArray):
-            for obj in noninstArray:
+        if len(nonInstArray):
+            for obj in nonInstArray:
                 self.buildGeoArray(obj)
 
     def writeFile(self, filePath, output):
@@ -333,69 +325,24 @@ class ThreeJsExporter(object):
         with file(filePath, 'w') as f:
                 f.write(json.dumps(output, separators=(",", ":"), allow_nan=False))
 
-    def processMesh(self, mesh):
-        print "Triangulating %s and deleting non-deformer history..." % mesh.name()
+    def _processMesh(self, mesh):
+        
         try:
             polyTriangulate(mesh)
             bakePartialHistory(mesh, ppt=1)
         except:
             self.errors.append("Problem processing mesh, %s." % mesh.name())
 
-    def _smartPrune(self, mesh):
-        skin = filter(lambda skin: mesh in skin.getOutputGeometry(), ls(type='skinCluster'))[0]
-        vIndex = 0
-        for weights in skin.getWeights(mesh.vtx):
-            posWeights = [w for w in weights if w > 0]
-            posWeights.sort()
-            numWeights = len(posWeights)
-
-            ## if number of weights over 3, prune that shit and hope it doesn't fuck up the mesh.
-            if numWeights > self.influences:
-                culprit = "[" + mesh.vtx[vIndex].split('[')[1]
-                print 'In mesh %s, vertex %s has %d weights' % (mesh.name(), culprit, numWeights)
-                pruneIndex = (numWeights - self.influences) - 1
-                pruneWeight = float("%.03f" % posWeights[pruneIndex]) + 0.001
-                culpritVtx = ".vtx[" + mesh.vtx[vIndex].split('[')[1]
-                skinPercent(skin, mesh + culpritVtx, pruneWeights=pruneWeight)
-
-            vIndex += 1
-
-    def processBones(self):
-        print "Tidying keyframes for the %s skeleton" % self.genderPrefix
-        # filter any bones with deleteKeysStr in name and delete all keyframes on those
-        # simplify curves with correct thresholds for remaining bones
-        bones = self.__jointsList
-
-        if self.options['spin']:
-            # get more accurate key values
-            # use first bone (it should be the same for all bones else it wont work)
-            split = sorted(set(keyframe(bones[0], time = (self.spinKeyStart, self.spinKeyEnd), query = True)))
-            print split
-            if not len(split):
-                print 'No sub-keyframes found from split frame parameter'
-
-            splitKeys = split[1:-1] if len(split) == 4 else split
-            self.spinKeyStart = splitKeys[0]
-            # self.spinKeyEnd = splitKeys[1]
-            print "Spin animation: Rotate flip happens at %s and %s" % (self.spinKeyStart, self.spinKeyEnd)
-
-        for bone in bones:
-            bName = bone.name()
-            clean = True
-            for k in self.deleteKeysStr:
-                if k in bName:
-                    print "Deleting keyframes on bone, '%s'" % bName
-                    self.deleteKeys(bone)
-                    clean = False
-
-            if clean:
-                print "Cleaning up keyframes on bone, '%s'" % bName
-                self.simplifyKeys(bone, spin=self.options['spin'])
-
-    def _removeNamespaces(self, nodes):
-        all_ns = [node.namespace() for node in nodes if node.namespace()]
-        # remove dupes
-        all_ns = list(set(all_ns))
+    
+    def _removeNamespaces(self, node):
+        # all_ns = [node.namespace() for node in nodes if node.namespace()]
+        # # remove dupes
+        # all_ns = list(set(all_ns))
+        ns = node.namespace()
+        if not ns:
+            return
+        else:
+            all_ns = [ns]
         ns_info = namespaceInfo(lon=1)
         # try to remove the first namespace
         for whole_ns in all_ns:
@@ -409,44 +356,7 @@ class ThreeJsExporter(object):
                 print 'Namespace "%s" is not removable.' % ns
                 continue
 
-    def deleteKeys(self, bone):
-        # clear all keys for whole time range
-        cutKey(bone, clear=1, time=':', hi='none', shape=1)
-
-    def simplifyKeys(self, bone, spin=False):
-        # delete static channels
-        delete(bone, staticChannels=1, uac=1, hi='none', shape=1)
-        return
-        # simplify remaining keys
-        tolerance = self.simplifyTolerance
-        if 'blink' in bone.name() or 'eye_ball' in bone.name():
-            tolerance = self.blinkSimplifyTolerance
-        if spin:
-            tolerance = self.spinSimplifyTolerance
-            # if bone.name() == 'body_hip_bind':
-            #     tolerance = 0.03
-            firstTimeStr = "%d:%d" % (self.startFrame, self.spinKeyStart)
-            secondTimeStr = "%d:%d" % (self.spinKeyEnd, self.endFrame)
-            # filterCurve(bone, f='simplify', timeTolerance=tolerance, startTime=self.startFrame, endTime=self.spinKeyStart)
-            # filterCurve(bone, f='simplify', timeTolerance=tolerance,  startTime=self.spinKeyEnd, endTime=self.endFrame)
-            simplify(bone, time=firstTimeStr, timeTolerance=tolerance, valueTolerance=self.valueTolerance)
-            simplify(bone, time=secondTimeStr, timeTolerance=tolerance, valueTolerance=self.valueTolerance)
-        else:
-            # filterCurve(bone, f='simplify', timeTolerance=tolerance)
-            if self.genderPrefix == 'female' and self.options['animationData']['name'] == 'headTurnD':
-                if 'blink' in bone.name() or 'eye_ball' in bone.name():
-                    filterCurve(bone, f='simplify', timeTolerance=0.02)
-                else:
-                    filterCurve(bone, f='simplify', timeTolerance=0.08)
-            elif self.genderPrefix == 'male' and self.options['animationData']['name'] == 'celiIdleC':
-                if 'blink' in bone.name() or 'eye_ball' in bone.name():
-                    filterCurve(bone, f='simplify', timeTolerance=0.02)
-                else:
-                    filterCurve(bone, f='simplify', timeTolerance=0.04)
-
-            else:
-                simplify(bone, time=":", timeTolerance=tolerance, valueTolerance=self.valueTolerance)
-
+    
 
     def populateMeshArray(self):
         print "populating the mesh array."
@@ -541,72 +451,8 @@ class ThreeJsExporter(object):
     def _goToFrame(self, frame):
         currentTime(frame)
 
-    def _getJoints(self):
-        return [j for j in ls(type='joint', v=1)]
-
-    def _exportBones(self):
-        joints = self.__jointsList
-        if not len(joints):
-            self.errors.append("No joints were found. No skeleton exported.")
-            return False
-
-        for joint in joints:
-            if joint.getParent():
-                parentIndex = self._indexOfJoint(joint.getParent().name())
-            else:
-                parentIndex = -1
-            rotq = joint.getRotation(quaternion=True) * joint.getOrientation()
-            pos = joint.getTranslation()
-            print joint.name()
-            self.bones.append({
-                "parent": parentIndex,
-                "name": '%s_%s' % (self.genderPrefix, joint.name()),
-                "pos": self._roundPos(pos),
-                "rotq": self._roundQuat(rotq)
-            })
-            
-        return True
-
-    def _indexOfJoint(self, name):
-        if not hasattr(self, '_jointNames'):
-            self._jointNames = dict([(joint.name(), i) for i, joint in enumerate(self.__jointsList)])
-
-        if name in self._jointNames:
-            return self._jointNames[name]
-        else:
-            return -1
-
-    def _exportSkins(self, mesh):
-
-
-        print("exporting skins for mesh: " + mesh.name())
-        skins = filter(lambda skin: mesh in skin.getOutputGeometry(), ls(type='skinCluster'))
-
-        if len(skins) == 1:
-            print("mesh has " + str(len(skins)) + " skins")
-            skin = skins[0]
-            joints = skin.influenceObjects()
-            for weights in skin.getWeights(mesh.vtx):
-                numWeights = 0
-
-                for i in range(0, len(weights)):
-                    if weights[i] > 0:
-                        self.skinWeights.append(weights[i])
-                        self.skinIndices.append(self._indexOfJoint(joints[i].name()))
-                        numWeights += 1
-
-                if numWeights > self.influences:
-                    raise Exception("More than " + str(self.influences) + " influences on a vertex in " + mesh.name() + ".")
-
-                for i in range(0, self.influences - numWeights):
-                    self.skinWeights.append(0)
-                    self.skinIndices.append(0)
-        else:
-            print("%s is attached to an incorrect number of skin clusters") % mesh.name()
-
-
+    
     def _exportMesh(self, mesh):
-        print("Exporting " + mesh.name())
         if self.options['vertices']:
             # for point in mesh.getPoints(space='world'):
             #     x = round(point.x, FLOAT_PRECISION)
@@ -636,7 +482,6 @@ class ThreeJsExporter(object):
                 self.options['uvs'] = False
 
         if self.options['faces']:
-            print("Exporting faces")
             self._exportFaces(mesh)
             self.verticeOffset += len(mesh.getPoints())
             self.uvOffset += mesh.numUVs()
@@ -787,10 +632,10 @@ def roundToPrec(floatVal):
 # to export animation, include 'animation' in the export options followed by animation name
 # exportOptions = "female 3 vertices normals colors uvs faces skeleton animation idleA"
 exportOptions = "vertices faces"
-exportPath = "/mnt/NY_Interactive/dev/jack/THREE/assets/models"
+exportPaths = ["/mnt/NY_Interactive/dev/jack/THREE/assets/models", "/mnt/NY_Interactive/dev/jack/THREE/html/js/models"]
 
 undoInfo(openChunk=True)
-ThreeJsExporter().run(exportPath, exportOptions)
+ThreeJsExporter().run(exportPaths, exportOptions)
 undoInfo(closeChunk=True)
 
 
